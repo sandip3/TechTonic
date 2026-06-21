@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useEvents } from '../context/EventContext';
+import { useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useEvents } from '../context/EventContext';
 
 function formatDate(dateStr) {
   if (!dateStr) return 'Date TBD';
@@ -41,18 +41,22 @@ export default function EventDetails() {
   const { getEventById, registerForEvent, addComment, getComments } = useEvents();
   const { currentUser } = useAuth();
 
+  const event = getEventById(id);
+  const comments = getComments(id);
+  const [commentText, setCommentText] = useState('');
+  const [commentError, setCommentError] = useState('');
+  const [registered, setRegistered] = useState(false);
   if (!currentUser) {
     return null;
   }
 
-  const event = getEventById(id);
-  const comments = getComments(id);
-
-  const [commentText, setCommentText] = useState('');
-  const [commentError, setCommentError] = useState('');
-  const [registered, setRegistered] = useState(
-    currentUser ? event?.registrations?.includes(currentUser.id) : false
-  );
+  // if (!event) {
+  //   return (
+  //     <div className="min-h-screen flex items-center justify-center">
+  //       <p>Loading event...</p>
+  //     </div>
+  //   );
+  // }
 
   if (!event) {
     return (
@@ -69,7 +73,7 @@ export default function EventDetails() {
     );
   }
 
-  const isRegistered = currentUser && event.registrations?.includes(currentUser.id);
+  const isRegistered = currentUser && event?.registrations?.includes(currentUser.uid);
   const colors = categoryColors[event.category] || categoryColors['Other'];
 
   const handleRegister = () => {
@@ -77,8 +81,7 @@ export default function EventDetails() {
       navigate('/login');
       return;
     }
-    registerForEvent(event.id, currentUser.id);
-    setRegistered(!registered);
+    registerForEvent(event.id, currentUser.uid);
   };
 
   const handleComment = e => {
@@ -92,8 +95,8 @@ export default function EventDetails() {
       return;
     }
     addComment(id, {
-      userId: currentUser.id,
-      userName: currentUser.name,
+      userId: currentUser.uid,
+      userName: currentUser.displayName,
       text: commentText.trim(),
     });
     setCommentText('');

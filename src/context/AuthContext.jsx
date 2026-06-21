@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import {
+  createUserWithEmailAndPassword,
+  updateProfile as firebaseUpdateProfile,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { auth } from '../firebase';
 
 const AuthContext = createContext(null);
 
@@ -6,102 +14,62 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Load session from localStorage on mount
   useEffect(() => {
-    const session = localStorage.getItem('techtonic_session');
-    if (session) {
-      try {
-        const parsed = JSON.parse(session);
-        setCurrentUser(parsed);
-      } catch {
-        localStorage.removeItem('techtonic_session');
-      }
-    }
-    setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, user => {
+      setCurrentUser(user);
+      setLoading(false);
+    });
+
+    return unsubscribe;
   }, []);
 
-  // Get all registered users from localStorage
-  const getUsers = () => {
-    const users = localStorage.getItem('techtonic_users');
-    return users ? JSON.parse(users) : [];
-  };
-
-  // Save users array to localStorage
-  const saveUsers = users => {
-    localStorage.setItem('techtonic_users', JSON.stringify(users));
-  };
-
   // Sign up a new user
-  const signup = (name, email, password) => {
-    const users = getUsers();
-    const existing = users.find(u => u.email === email);
-    if (existing) {
-      return { success: false, message: 'An account with this email already exists.' };
+  const signup = async (name, email, password) => {
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      await firebaseUpdateProfile(result.user, { displayName: name });
+      return { success: true };
+    } catch (error) {
+      if (error.code === 'auth/email-already-in-use') {
+        return {
+          success: false,
+          message: 'Email already exists',
+        };
+      }
+      return {
+        success: false,
+        message: error.message,
+      };
     }
-
-    const newUser = {
-      id: 'user_' + Date.now(),
-      name,
-      email,
-      password,
-      role: email === 'admin@gmail.com' ? 'admin' : 'user',
-      bio: '',
-      skills: '',
-      college: '',
-      createdAt: new Date().toISOString(),
-    };
-
-    const updated = [...users, newUser];
-    saveUsers(updated);
-
-    // Auto login after signup
-    const sessionUser = { ...newUser };
-    delete sessionUser.password;
-    setCurrentUser(sessionUser);
-    localStorage.setItem('techtonic_session', JSON.stringify(sessionUser));
-
-    return { success: true };
   };
 
   // Log in existing user
-  const login = (email, password) => {
-    const users = getUsers();
-    const user = users.find(u => u.email === email && u.password === password);
-    if (!user) {
-      return { success: false, message: 'Invalid email or password.' };
+  const login = async (email, password) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      return {
+        success: true,
+      };
+    } catch (error) {
+      if (error.code === 'auth/invalid-credential') {
+        return {
+          success: false,
+          message: 'Invalid email or password',
+        };
+      }
+      return {
+        success: false,
+        message: error.message,
+      };
     }
-
-    const sessionUser = { ...user };
-    delete sessionUser.password;
-    setCurrentUser(sessionUser);
-    localStorage.setItem('techtonic_session', JSON.stringify(sessionUser));
-
-    return { success: true };
   };
 
   // Log out current user
-  const logout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('techtonic_session');
+  const logout = async () => {
+    await signOut(auth);
   };
 
   // Update user profile
-  const updateProfile = updates => {
-    const users = getUsers();
-    const idx = users.findIndex(u => u.id === currentUser.id);
-    if (idx === -1) return { success: false, message: 'User not found.' };
-
-    const updatedUser = { ...users[idx], ...updates };
-    users[idx] = updatedUser;
-    saveUsers(users);
-
-    const sessionUser = { ...updatedUser };
-    delete sessionUser.password;
-    setCurrentUser(sessionUser);
-    localStorage.setItem('techtonic_session', JSON.stringify(sessionUser));
-
-    return { success: true };
-  };
 
   const value = {
     currentUser,
@@ -109,7 +77,6 @@ export function AuthProvider({ children }) {
     signup,
     login,
     logout,
-    updateProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

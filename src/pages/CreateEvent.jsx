@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import { useEvents } from '../context/EventContext';
@@ -63,8 +63,8 @@ export default function CreateEvent() {
       title: form.title.trim(),
       description: form.description.trim(),
       location: form.location.trim(),
-      creatorId: currentUser.id,
-      creatorName: currentUser.name,
+      creatorId: currentUser.uid,
+      creatorName: currentUser.displayName,
     });
     setLoading(false);
     setSubmitted(true);
@@ -244,7 +244,7 @@ export default function CreateEvent() {
               <div className="bg-gray-50 rounded-md p-3 border border-gray-100">
                 <p className="text-xs text-gray-500">
                   This event will be published under your name:{' '}
-                  <strong className="text-gray-700">{currentUser?.name}</strong>
+                  <strong className="text-gray-700">{currentUser?.displayName}</strong>
                 </p>
               </div>
 

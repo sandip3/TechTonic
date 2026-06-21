@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useEvents } from '../context/EventContext';
 import { useAuth } from '../context/AuthContext';
+import { useEvents } from '../context/EventContext';
 
 function timeAgo(isoStr) {
   const diff = Date.now() - new Date(isoStr).getTime();
@@ -75,7 +75,7 @@ export default function Community() {
       content: form.content.trim(),
       tags: form.tags.trim(),
       authorId: currentUser.id,
-      authorName: currentUser.name,
+      authorName: currentUser.displayName,
     });
     setForm({ title: '', content: '', tags: '' });
     setShowForm(false);

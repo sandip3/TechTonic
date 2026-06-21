@@ -1,4 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import {
+  collection,
+  addDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  doc,
+  arrayUnion,
+  arrayRemove,
+  query,
+  where,
+} from 'firebase/firestore';
+import { db } from '../firebase';
 
 const EventContext = createContext(null);
 
@@ -152,105 +165,171 @@ const SEED_COMMENTS = {
 };
 
 export function EventProvider({ children }) {
-  const [events, setEvents] = useState([]);
   const [posts, setPosts] = useState([]);
+  const [events, setEvents] = useState([]);
   const [comments, setComments] = useState({});
+  const [loadingEvents, setLoadingEvents] = useState(true);
 
   // Load data from localStorage or use seed data on first run
+
   useEffect(() => {
-    try {
-      const storedEvents = localStorage.getItem('techtonic_events');
-      if (storedEvents) {
-        setEvents(JSON.parse(storedEvents));
-      } else {
-        setEvents(SEED_EVENTS);
-        localStorage.setItem('techtonic_events', JSON.stringify(SEED_EVENTS));
-      }
+    const fetchEvents = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'events'));
+        const firebaseEvents = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
 
-      const storedPosts = localStorage.getItem('techtonic_posts');
-      if (storedPosts) {
-        setPosts(JSON.parse(storedPosts));
-      } else {
+        setEvents([...SEED_EVENTS, ...firebaseEvents]);
         setPosts(SEED_POSTS);
-        localStorage.setItem('techtonic_posts', JSON.stringify(SEED_POSTS));
-      }
-
-      const storedComments = localStorage.getItem('techtonic_comments');
-      if (storedComments) {
-        setComments(JSON.parse(storedComments));
-      } else {
         setComments(SEED_COMMENTS);
-        localStorage.setItem('techtonic_comments', JSON.stringify(SEED_COMMENTS));
+      } catch (error) {
+        console.error('Error fetching events:', error);
+      } finally {
+        setLoadingEvents(false);
       }
-    } catch (error) {
-      console.error('Error loading data from localStorage:', error);
-      setEvents(SEED_EVENTS);
-      setPosts(SEED_POSTS);
-      setComments(SEED_COMMENTS);
-    }
-  }, []);
+    };
 
-  const saveEvents = data => {
-    setEvents(data);
-    localStorage.setItem('techtonic_events', JSON.stringify(data));
-  };
+    fetchEvents();
+  }, []);
 
   // ── Events ───────────────────────────────────────────
 
-  const addEvent = eventData => {
-    const newEvent = {
-      ...eventData,
-      id: 'event_' + Date.now(),
-      registrations: [],
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [newEvent, ...events];
-    saveEvents(updated);
-    return newEvent;
+  const addEvent = async eventData => {
+    try {
+      const docRef = await addDoc(collection(db, 'events'), {
+        ...eventData,
+        registrations: [],
+        createdAt: new Date().toISOString(),
+      });
+
+      const newEvent = {
+        id: docRef.id,
+        ...eventData,
+        registrations: [],
+        createdAt: new Date().toISOString(),
+      };
+      setEvents(prev => [newEvent, ...prev]);
+      return {
+        success: true,
+        event: newEvent,
+      };
+    } catch (error) {
+      console.error(error);
+      return {
+        success: false,
+        error,
+      };
+    }
   };
 
-  const updateEvent = (id, eventData) => {
-    const updated = events.map(e => (e.id === id ? { ...e, ...eventData } : e));
-    saveEvents(updated);
+  const updateEvent = async (id, eventData) => {
+    try {
+      await updateDoc(doc(db, 'events', id), eventData);
+      setEvents(prev =>
+        prev.map(e =>
+          e.id === id ?
+            {
+              ...e,
+              ...eventData,
+            }
+          : e
+        )
+      );
+    } catch (error) {
+      console.error(error);
+    }
   };
 
-  const deleteEvent = id => {
-    const updated = events.filter(e => e.id !== id);
-    saveEvents(updated);
+  const deleteEvent = async id => {
+    try {
+      await deleteDoc(doc(db, 'events', id));
+      setEvents(prev => prev.filter(e => e.id !== id));
+    } catch (error) {
+      console.error(error);
+    }
   };
 
-  const registerForEvent = (eventId, userId) => {
-    const updated = events.map(e => {
-      if (e.id === eventId) {
-        const already = e.registrations.includes(userId);
-        const registrations =
-          already ? e.registrations.filter(r => r !== userId) : [...e.registrations, userId];
-        return { ...e, registrations };
-      }
-      return e;
-    });
-    saveEvents(updated);
+  const registerForEvent = async (eventId, userId) => {
+    const event = events.find(e => e.id === eventId);
+    if (!event) return;
+    const already = event.registrations?.includes(userId);
+
+    try {
+      await updateDoc(doc(db, 'events', eventId), {
+        registrations: already ? arrayRemove(userId) : arrayUnion(userId),
+      });
+
+      setEvents(prev =>
+        prev.map(e => {
+          if (e.id !== eventId) return e;
+          return {
+            ...e,
+            registrations:
+              already ? e.registrations.filter(r => r !== userId) : [...e.registrations, userId],
+          };
+        })
+      );
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const getEventById = id => events.find(e => e.id === id);
 
-  // ── Comments ─────────────────────────────────────────
+  const fetchComments = async eventId => {
+    try {
+      const q = query(collection(db, 'comments'), where('eventId', '==', eventId));
+      const snapshot = await getDocs(q);
+      const eventComments = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
-  const addComment = (eventId, comment) => {
-    const newComment = {
-      ...comment,
-      id: 'cmt_' + Date.now(),
-      createdAt: new Date().toISOString(),
-    };
-    const updated = {
-      ...comments,
-      [eventId]: [...(comments[eventId] || []), newComment],
-    };
-    setComments(updated);
-    localStorage.setItem('techtonic_comments', JSON.stringify(updated));
+      setComments(prev => ({
+        ...prev,
+        [eventId]: eventComments,
+      }));
+    } catch (error) {
+      console.log(error);
+    }
   };
 
-  const getComments = eventId => comments[eventId] || [];
+  // ── Comments ─────────────────────────────────────────
+
+  const addComment = async (eventId, comment) => {
+    try {
+      const docRef = await addDoc(collection(db, 'comments'), {
+        eventId,
+        ...comment,
+        createdAt: new Date().toISOString(),
+      });
+
+      const newComment = {
+        id: docRef.id,
+        eventId,
+        ...comment,
+        createdAt: new Date().toISOString(),
+      };
+
+      setComments(prev => ({
+        ...prev,
+        [eventId]: [...(prev[eventId] || []), newComment],
+      }));
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const getComments = eventId => {
+    if (!comments[eventId]) {
+      fetchComments(eventId);
+      return [];
+    }
+
+    return comments[eventId];
+  };
 
   // ── Community Posts ───────────────────────────────────
 
@@ -288,6 +367,8 @@ export function EventProvider({ children }) {
     likePost,
   };
 
+
+  
   return <EventContext.Provider value={value}>{children}</EventContext.Provider>;
 }
 

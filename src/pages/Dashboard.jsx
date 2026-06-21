@@ -19,12 +19,12 @@ export default function Dashboard() {
   const [successMsg, setSuccessMsg] = useState('');
 
   // Events created by this user
-  const myEvents = events.filter(e => e.creatorId === currentUser?.id);
+  const myEvents = events.filter(e => e.creatorId === currentUser?.uid);
   const allEvents = events;
 
   // Events this user registered for
   const registeredEvents = events.filter(
-    e => e.creatorId !== currentUser?.id && e.registrations?.includes(currentUser?.id)
+    e => e.creatorId !== currentUser?.uid && e.registrations?.includes(currentUser?.uid)
   );
 
   const stats = [
@@ -89,7 +89,7 @@ export default function Dashboard() {
           {/* Header */}
           <div className="mb-6">
             <h1 className="font-display text-2xl font-bold text-gray-900">
-              Welcome back, {currentUser?.name?.split(' ')[0]} 👋
+              Welcome back, {currentUser?.displayName || 'User'} 👋
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
               Here's an overview of your activity on TechTonic.
@@ -153,7 +153,8 @@ export default function Dashboard() {
                     key={event.id}
                     event={event}
                     showActions={
-                      currentUser?.role === 'admin' || event.creatorId === currentUser?.id
+                      currentUser?.email === 'admin@gmail.com' ||
+                      event.creatorId === currentUser?.uid
                     }
                     onEdit={handleEditClick}
                     onDelete={handleDeleteClick}
